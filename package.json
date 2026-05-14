@@ -1,0 +1,19 @@
+{
+  "name": "realtime-stt",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@elevenlabs/client": "^1.7.0",
+    "@elevenlabs/elevenlabs-js": "^2.47.0",
+    "@elevenlabs/react": "^1.6.0",
+    "esbuild": "^0.28.0",
+    "express": "^5.2.1"
+  }
+}

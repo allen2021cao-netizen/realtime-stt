@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>语音转文字 — Scribe v2</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --card: rgba(255,255,255,0.84);
+      --card-border: rgba(0,0,0,0.06);
+      --text: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --text-tertiary: #aeaeb2;
+      --accent: #0071e3;
+      --accent-hover: #0077ed;
+      --recording: #ff3b30;
+      --green: #34c759;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 20px rgba(0,0,0,0.06);
+      --radius-sm: 12px;
+      --radius: 20px;
+      --radius-lg: 28px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 20px 60px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .header .badge {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--accent);
+      background: rgba(0,113,227,0.08);
+      padding: 4px 12px;
+      border-radius: 100px;
+    }
+
+    /* ── Main Card ── */
+    .card {
+      width: 100%;
+      max-width: 720px;
+      background: var(--card);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    /* ── Control Bar ── */
+    .control-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 24px;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 22px;
+      border: none;
+      border-radius: 100px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      font-family: inherit;
+    }
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-record {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-record:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: scale(1.03);
+    }
+    .btn-record.recording {
+      background: var(--recording);
+      animation: pulse-rec 2s infinite;
+    }
+    @keyframes pulse-rec {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.3); }
+      50% { box-shadow: 0 0 0 12px rgba(255,59,48,0); }
+    }
+
+    .btn-secondary {
+      background: rgba(0,0,0,0.04);
+      color: var(--text);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(0,0,0,0.08);
+    }
+
+    .status-badge {
+      margin-left: auto;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+      transition: background 0.3s;
+    }
+    .status-dot.recording {
+      background: var(--recording);
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* ── Stats Row ── */
+    .stats {
+      display: flex;
+      gap: 32px;
+      padding: 12px 24px;
+      border-bottom: 1px solid rgba(0,0,0,0.04);
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+    }
+    .stat strong {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-right: 4px;
+    }
+
+    /* ── Transcript Area ── */
+    .transcript-area {
+      padding: 20px 24px;
+      min-height: 280px;
+      max-height: 52vh;
+      overflow-y: auto;
+    }
+    .transcript-area::-webkit-scrollbar {
+      width: 4px;
+    }
+    .transcript-area::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.1);
+      border-radius: 100px;
+    }
+
+    /* Partial (live) */
+    .partial {
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(0,113,227,0.04);
+      border: 1px solid rgba(0,113,227,0.1);
+      font-size: 0.95rem;
+      color: var(--accent);
+      line-height: 1.6;
+      min-height: 22px;
+      transition: opacity 0.15s;
+    }
+    .partial:empty {
+      display: none;
+    }
+
+    /* Committed segments */
+    .segment {
+      padding: 8px 0;
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--text);
+      border-bottom: 1px solid rgba(0,0,0,0.03);
+      animation: fadeIn 0.25s ease;
+    }
+    .segment:last-child {
+      border-bottom: none;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .segment-time {
+      font-size: 0.7rem;
+      color: var(--text-tertiary);
+      margin-right: 10px;
+      font-weight: 500;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-tertiary);
+    }
+    .empty-state .icon {
+      font-size: 3rem;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+    .empty-state p {
+      font-size: 0.9rem;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 24px;
+      font-size: 0.72rem;
+      color: var(--text-tertiary);
+      text-align: center;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: #fff;
+      padding: 10px 24px;
+      border-radius: 100px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show {
+      opacity: 1;
+    }
+
+    /* ── Debug (hidden by default) ── */
+    .debug-panel {
+      margin-top: 16px;
+      width: 100%;
+      max-width: 720px;
+      font-size: 0.68rem;
+      color: var(--text-tertiary);
+      font-family: "SF Mono", "Fira Code", monospace;
+      display: none;
+    }
+    .debug-panel.visible { display: block; }
+
+    /* ── Waveform ── */
+    .waveform {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 2px;
+      height: 32px;
+      margin: 0 8px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .waveform.visible { opacity: 1; }
+    .waveform .bar {
+      width: 3px;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: height 0.08s ease;
+    }
+
+    @media (max-width: 600px) {
+      body { padding: 16px 12px 40px; }
+      .card { border-radius: var(--radius); }
+      .control-bar { padding: 14px 16px; gap: 8px; }
+      .btn { padding: 8px 16px; font-size: 0.82rem; }
+      .transcript-area { padding: 16px; }
+      .stats { gap: 16px; padding: 10px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>语音转文字</h1>
+    <span class="badge">ElevenLabs Scribe v2</span>
+  </div>
+
+  <div class="card">
+    <!-- Control Bar -->
+    <div class="control-bar">
+      <button class="btn btn-record" id="recordBtn" onclick="toggleRecording()">
+        <span id="btnIcon">🎤</span>
+        <span id="btnLabel">开始录音</span>
+      </button>
+      <button class="btn btn-secondary" id="copyBtn" onclick="copyAll()" disabled>📋 复制</button>
+      <button class="btn btn-secondary" id="clearBtn" onclick="clearAll()">🗑</button>
+
+      <div class="waveform" id="waveform">
+        <div class="bar" style="height:4px"></div><div class="bar" style="height:4px"></div>
+        <div class="bar" style="height:4px"></div><div class="bar" style="height:4px"></div>
+        <div class="bar" style="height:4px"></div><div class="bar" style="height:4px"></div>
+        <div class="bar" style="height:4px"></div><div class="bar" style="height:4px"></div>
+        <div class="bar" style="height:4px"></div><div class="bar" style="height:4px"></div>
+      </div>
+
+      <div class="status-badge">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">就绪</span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <strong id="charCount">0</strong>字
+      </div>
+      <div class="stat">
+        <strong id="segCount">0</strong>段落
+      </div>
+      <div class="stat">
+        <strong id="duration">00:00</strong>
+      </div>
+    </div>
+
+    <!-- Transcript -->
+    <div class="transcript-area" id="transcriptArea">
+      <div class="partial" id="partialText"></div>
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🎙️</div>
+        <p>点击「开始录音」开始转写</p>
+      </div>
+      <div id="committedText"></div>
+    </div>
+  </div>
+
+  <div class="debug-panel" id="debugPanel"><pre id="debugLog"></pre></div>
+  <div class="footer">Token 15分钟有效 · 说完停顿自动分段</div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── State ──
+    let ws, mediaStream, audioCtx, processor, source;
+    let isRecording = false;
+    let totalChars = 0;
+    let segmentCount = 0;
+    let startTime = 0;
+    let durationTimer = null;
+    let chunkCount = 0;
+    let lastLevel = 0;
+
+    // ── DOM refs ──
+    const $ = id => document.getElementById(id);
+    const recordBtn = $("recordBtn");
+    const btnIcon = $("btnIcon");
+    const btnLabel = $("btnLabel");
+    const copyBtn = $("copyBtn");
+    const statusDot = $("statusDot");
+    const statusText = $("statusText");
+    const partialEl = $("partialText");
+    const committedEl = $("committedText");
+    const emptyState = $("emptyState");
+    const charCountEl = $("charCount");
+    const segCountEl = $("segCount");
+    const durationEl = $("duration");
+    const transcriptArea = $("transcriptArea");
+    const debugPanel = $("debugPanel");
+    const debugLog = $("debugLog");
+    const toast = $("toast");
+    const waveform = $("waveform");
+    const bars = waveform.querySelectorAll(".bar");
+
+    function log(msg) {
+      debugPanel.classList.add("visible");
+      debugLog.textContent += msg + "\n";
+      debugLog.scrollTop = debugLog.scrollHeight;
+      console.log("[STT]", msg);
+    }
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 2000);
+    }
+
+    function updateStats() {
+      charCountEl.textContent = totalChars.toLocaleString();
+      segCountEl.textContent = segmentCount;
+    }
+
+    function updateDuration() {
+      if (!startTime) { durationEl.textContent = "00:00"; return; }
+      const sec = Math.floor((Date.now() - startTime) / 1000);
+      const m = String(Math.floor(sec / 60)).padStart(2, "0");
+      const s = String(sec % 60).padStart(2, "0");
+      durationEl.textContent = m + ":" + s;
+    }
+
+    function updateWaveform(level) {
+      const easing = 0.4;
+      lastLevel = lastLevel * (1 - easing) + level * easing;
+      bars.forEach((bar, i) => {
+        const phase = (i / bars.length) * Math.PI * 2;
+        const h = 4 + Math.abs(Math.sin(Date.now() / 300 + phase)) * lastLevel * 28;
+        bar.style.height = h + "px";
+      });
+    }
+
+    // ── Audio processing ──
+    function float32ToBase64PCM16(float32) {
+      const pcm16 = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      const bytes = new Uint8Array(pcm16.buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    }
+
+    function resampleTo16k(float32, srcRate) {
+      if (srcRate === 16000) return float32;
+      const ratio = srcRate / 16000;
+      const outLen = Math.floor(float32.length / ratio);
+      const out = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const srcIdx = i * ratio;
+        const lo = Math.floor(srcIdx);
+        const hi = Math.min(lo + 1, float32.length - 1);
+        const frac = srcIdx - lo;
+        out[i] = float32[lo] + (float32[hi] - float32[lo]) * frac;
+      }
+      return out;
+    }
+
+    function getRMS(float32) {
+      let sum = 0;
+      for (let i = 0; i < float32.length; i++) sum += float32[i] * float32[i];
+      return Math.sqrt(sum / float32.length);
+    }
+
+    // ── API ──
+    function getTokenUrl() {
+      // Auto-detect: local dev vs Netlify production
+      const host = window.location.hostname;
+      if (host === "localhost" || host === "127.0.0.1") {
+        return "http://localhost:3456/scribe-token";
+      }
+      return "/scribe-token"; // Netlify redirect → /.netlify/functions/scribe-token
+    }
+
+    async function getToken() {
+      const resp = await fetch(getTokenUrl());
+      if (!resp.ok) throw new Error("Token fetch failed: " + resp.status);
+      return (await resp.json()).token;
+    }
+
+    // ── Start / Stop ──
+    async function toggleRecording() {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        await startRecording();
+      }
+    }
+
+    async function startRecording() {
+      try {
+        recordBtn.disabled = true;
+        btnLabel.textContent = "连接中…";
+        statusDot.classList.remove("recording");
+        statusText.textContent = "连接中";
+
+        const token = await getToken();
+        log("Token: " + token.substring(0, 15) + "...");
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: { ideal: 16000 },
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+
+        const trackSettings = mediaStream.getAudioTracks()[0].getSettings();
+        log("Mic native rate: " + (trackSettings.sampleRate || "unknown"));
+
+        const wsUrl = `wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&token=${encodeURIComponent(token)}`;
+        ws = new WebSocket(wsUrl);
+        chunkCount = 0;
+
+        ws.onopen = () => {
+          log("✅ WebSocket connected");
+
+          audioCtx = new AudioContext();
+          const ctxRate = audioCtx.sampleRate;
+          log("AudioCtx rate: " + ctxRate);
+
+          source = audioCtx.createMediaStreamSource(mediaStream);
+
+          // Analyser for waveform
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          processor = audioCtx.createScriptProcessor(4096, 1, 1);
+          source.connect(processor);
+          processor.connect(audioCtx.destination);
+
+          processor.onaudioprocess = (e) => {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+            let float32 = e.inputBuffer.getChannelData(0);
+            const rms = getRMS(float32);
+
+            // Waveform
+            if (chunkCount % 3 === 0) updateWaveform(Math.min(rms * 5, 1));
+
+            float32 = resampleTo16k(float32, ctxRate);
+            const base64 = float32ToBase64PCM16(float32);
+            ws.send(JSON.stringify({
+              message_type: "input_audio_chunk",
+              audio_base_64: base64,
+              commit: false,
+              sample_rate: 16000,
+            }));
+            chunkCount++;
+            if (chunkCount % 50 === 0) log("📤 " + chunkCount + " chunks sent");
+          };
+
+          // UI state
+          isRecording = true;
+          startTime = Date.now();
+          durationTimer = setInterval(updateDuration, 1000);
+          waveform.classList.add("visible");
+
+          recordBtn.classList.add("recording");
+          recordBtn.disabled = false;
+          btnIcon.textContent = "⏹";
+          btnLabel.textContent = "停止录音";
+          statusDot.classList.add("recording");
+          statusText.textContent = "录音中";
+          emptyState.style.display = "none";
+
+          updateDuration();
+        };
+
+        ws.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+
+          if (msg.message_type === "session_started") {
+            log("✅ Session started");
+          }
+
+          if (msg.message_type === "partial_transcript") {
+            partialEl.textContent = msg.text || "";
+            if (msg.text) emptyState.style.display = "none";
+          }
+
+          if (msg.message_type === "committed_transcript") {
+            const text = (msg.text || "").trim();
+            if (!text) return;
+
+            partialEl.textContent = "";
+            log("✅ committed: " + text.substring(0, 80));
+
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, "0") + ":" +
+                             now.getMinutes().toString().padStart(2, "0");
+            const seg = document.createElement("div");
+            seg.className = "segment";
+            seg.innerHTML = `<span class="segment-time">${timeStr}</span>${escapeHtml(text)}`;
+            committedEl.appendChild(seg);
+
+            totalChars += text.length;
+            segmentCount++;
+            updateStats();
+            copyBtn.disabled = false;
+            emptyState.style.display = "none";
+
+            transcriptArea.scrollTop = transcriptArea.scrollHeight;
+          }
+
+          if (msg.message_type === "error") {
+            log("❌ Server error: " + JSON.stringify(msg));
+            showToast("错误: " + (msg.message || "未知错误"));
+            stopRecording();
+          }
+        };
+
+        ws.onerror = () => {
+          log("❌ WebSocket error");
+          showToast("连接失败，请重试");
+          stopRecording();
+        };
+
+        ws.onclose = (ev) => {
+          log("🔌 WS closed: " + ev.code + " " + ev.reason);
+          if (isRecording) {
+            showToast("连接已断开");
+            stopRecording();
+          }
+        };
+
+      } catch (err) {
+        log("❌ " + err.message);
+        showToast(err.message);
+        resetUI();
+      }
+    }
+
+    function stopRecording() {
+      isRecording = false;
+      if (processor) { processor.disconnect(); processor = null; }
+      if (source) { source.disconnect(); source = null; }
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+      if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+      if (ws) { ws.close(); ws = null; }
+      if (durationTimer) { clearInterval(durationTimer); durationTimer = null; }
+
+      partialEl.textContent = "";
+      waveform.classList.remove("visible");
+      resetUI();
+    }
+
+    function resetUI() {
+      recordBtn.classList.remove("recording");
+      recordBtn.disabled = false;
+      btnIcon.textContent = "🎤";
+      btnLabel.textContent = "开始录音";
+      statusDot.classList.remove("recording");
+      statusText.textContent = "就绪";
+
+      if (totalChars === 0) {
+        emptyState.style.display = "";
+      }
+    }
+
+    // ── Actions ──
+    function clearAll() {
+      if (isRecording) return;
+      committedEl.innerHTML = "";
+      totalChars = 0;
+      segmentCount = 0;
+      startTime = 0;
+      durationEl.textContent = "00:00";
+      partialEl.textContent = "";
+      updateStats();
+      copyBtn.disabled = true;
+      emptyState.style.display = "";
+      showToast("已清空");
+    }
+
+    async function copyAll() {
+      const texts = [];
+      committedEl.querySelectorAll(".segment").forEach(seg => {
+        texts.push(seg.textContent.replace(/^\d{2}:\d{2}/, "").trim());
+      });
+      const full = texts.join("\n");
+      if (!full) return;
+      try {
+        await navigator.clipboard.writeText(full);
+        showToast("已复制 " + totalChars + " 字");
+      } catch {
+        showToast("复制失败");
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ── Keyboard shortcuts ──
+    document.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        toggleRecording();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        clearAll();
+      }
+    });
+  </script>
+</body>
+</html>
